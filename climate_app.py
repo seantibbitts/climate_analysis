@@ -22,9 +22,6 @@ Base.prepare(engine, reflect=True)
 Measurement = Base.classes.measurement
 Station = Base.classes.station
 
-# Create our session (link) from Python to the DB
-session = Session(engine)
-
 # Create Flask instance
 app = Flask(__name__)
 
@@ -37,11 +34,14 @@ def index():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/daterange/&lt;start&gt; and /api/v1.0/daterange/&lt;start&gt;/&lt;end&gt;"
+        f"/api/v1.0/daterange/&lt;start&gt; and /api/v1.0/daterange/&lt;start&gt;/&lt;end&gt;<br/>"
+        "(for dates between 2010-01-01 and 2017-08-23)"
     )
 
 @app.route("/api/v1.0/precipitation")
 def precip():
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
     # Design a query to retrieve the last 12 months of precipitation data
     max_date = session.query(func.max(Measurement.date)).all()[0][0]
     # Calculate the date 1 year ago from the last data point in the database
@@ -58,16 +58,26 @@ def precip():
     last_12_prcp_df_sorted = last_12_prcp_df.sort_index()
     # Convert to dictionary with dates as keys
     last_12_dict = last_12_prcp_df_sorted.to_dict()
-    # Return as JSON object
+    # Close session
+    session.close()
     return jsonify(last_12_dict)
 
 @app.route("/api/v1.0/stations")
 def stations():
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+
+    # Get all stations
     stations = list(np.ravel(session.query(Station.station).all()))
+
+    # Close session
+    session.close()
     return jsonify(stations)
 
 @app.route("/api/v1.0/tobs")
 def temps():
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
     # Design a query to retrieve the last 12 months of temperature data
     max_date = session.query(func.max(Measurement.date)).all()[0][0]
     # Calculate the date 1 year ago from the last data point in the database
@@ -76,20 +86,34 @@ def temps():
     # Perform a query to retrieve the temperature scores
     last_12_temp = list(np.ravel(session.query(Measurement.tobs)\
         .filter(Measurement.date > prev_year_date).all()))
+    # Close session
+    session.close()
     return jsonify(last_12_temp)
-    
-
 
 @app.route("/api/v1.0/daterange/<start>")
 def data_start(start):
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+
+    # Query min, avg and max temps for dates after start
     temp_list = list(np.ravel(session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs),
     func.max(Measurement.tobs)).filter(Measurement.date > start).all()))
+
+    # Close session
+    session.close()
     return jsonify(temp_list)
 
 @app.route("/api/v1.0/daterange/<start>/<end>")
 def date_start_end(start, end):
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+
+    # Query min, avg and max temps for dates between start and end
     temp_list = list(np.ravel(session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs),
-    func.max(Measurement.tobs)).filter(Measurement.date >= start).filter(Measurement.date <= end).all()))
+    func.max(Measurement.tobs)).filter(Measurement.date > start).filter(Measurement.date < end).all()))
+
+    # Close session
+    session.close()
     return jsonify(temp_list)
 
 if __name__ == "__main__":
